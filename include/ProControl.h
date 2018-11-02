@@ -10,7 +10,7 @@
 #define SOFTENCODE 0
 #define USE_FFMPEG  0
 #define VIDEO_STATUS  1
-#define  AUDIO_STATUS  0
+#define  AUDIO_STATUS  1
 #define AUDIO_RATE 16000
 #define DST_WIDTH 1280
 #define DST_HEIGHT 720
@@ -18,7 +18,7 @@
 #define DEFAULT_FPS 25
 
 #define VIDEOINDEX 0
-
+#define AUDIOINDEX 1
 struct MediaDataStruct{
     int len;
     int index;

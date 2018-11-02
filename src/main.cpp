@@ -1,4 +1,5 @@
 #include "ProControl.h"
+#include "libpcm_aac.h"
 #include "LibRtmpTool.h"
 #include "rtmp_push_librtmp.h"
 #include "spdlog/spdlog.h"
@@ -45,10 +46,15 @@ std::queue <MediaDataStruct> *audio_buf_queue_faac;
 pthread_mutex_t audio_buf_queue_lock_faac;
 
 LibRtmpClass *libRtmp;
+Alsa2PCM pcm_obj;
+Pcm2AAC  aac_obj;
 bool push_flag = true;
 RtmpInfo  rtmp_info;
 
 void *fps_function(void *ptr);
+void *FAACAudioEncFun(void *ptr);
+int PCM2AACCallback(unsigned char*buff,unsigned long len, void* args);
+
 
 int main(int argc, char *argv[])
 {
@@ -60,18 +66,90 @@ int main(int argc, char *argv[])
     LOG(true, "Progress start");
 
     memset(&rtmp_info, 0, sizeof(RtmpInfo));
-    rtmp_info.rtmp_info[0].rtmp_url_live = "rtmp://192.168.1.129/live/rabbit";
-    rtmp_info.rtmp_info[0].rtmp_url_record = "rtmp://192.168.1.129/live/robot_record";
+    rtmp_info.rtmp_info[0].rtmp_url_live = "rtmp://video-center.alivecdn.com/AppName/StreamName?vhost=live.rabbitslive.com";
 
     libRtmp = new LibRtmpClass();
     libRtmp->InitSockets();
     libRtmp->naluUnit = new NaluUnit();
     libRtmp->naluUnit->flag = 0;
+    int ret = -1; 
+#if VIDEO_STATUS
     video_buf_queue = new std::queue<MediaDataStruct>;
     LOG(NULL != video_buf_queue, function + " Init video_buf_queue");
     pthread_mutex_init(&video_buf_queue_lock, NULL);
-    int ret = -1;    
+#endif
+
+#if AUDIO_STATUS
+    Stream_Record_Info s_info;
+    s_info.Channel = 1;
+    s_info.Frames = 160;
+    s_info.Rate = 16000;
+    s_info.pcm_type=PCM_TYPE_PULSEaUDIO;
+    s_info.Format  = SND_PCM_FORMAT_S16_LE;
     
+    ret = pcm_obj.Init(s_info);
+    if(ret == 0){
+        printf("pcm_obj init success \n");
+        LOG(true, function + " pcm_obj init success");
+    }else{
+        printf("pcm_obj init failed \n");
+        LOG(false, function + " pcm_obj init failed");
+        return ret;
+    } 
+    
+    aac_obj.nSampleRate = s_info.Rate;
+    aac_obj.nChannels = 1;
+    aac_obj.nBit = 16;
+    aac_obj.nInputSamples = 0;
+    aac_obj.nMaxInputBytes = 0;
+    aac_obj.nMaxOutputBytes = 0;
+    aac_obj.hEncoder = NULL;
+    aac_obj.pConfiguration = NULL;
+    aac_obj.pbPCMBuffer = NULL;
+    aac_obj.pbAACBuffer = NULL;
+    aac_obj.easy_handle = NULL;
+    ret = aac_obj.Init(PCM2AACCallback,NULL);
+    if(ret == 0){
+        printf("aac_obj init success \n");
+        LOG(true, function + " aac_obj init success");
+    }else{
+        printf("aac_obj init failed \n");
+        LOG(false, function + " aac_obj init failed");
+        return ret;
+    }
+
+    audio_buf_queue_faac = new std::queue<MediaDataStruct>;
+    LOG(NULL != audio_buf_queue_faac, function + " Init audio_buf_queue_faac");
+    pthread_mutex_init(&audio_buf_queue_lock_faac, NULL);
+
+    pthread_t faac_thread;
+    ret = pthread_create(&faac_thread, NULL, FAACAudioEncFun, NULL);
+    if(ret){
+        printf("----(%s)--(%s)----(%d)--phtread_create FAACAudioEncFun failed!--\n",__FILE__,__FUNCTION__,__LINE__);
+        LOG(false, function + " create FAACAudioEncFun failed");
+        return ret;
+    }
+    LOG(true, function + " create faac encode aac thread success");
+#endif    
+    ret = -1;    
+    while(ret < 0){
+        ret = libRtmp->LibRTMP_Connect((char*)rtmp_info.rtmp_info[0].rtmp_url_live.c_str());
+        if(ret < 0){
+            printf("connect to url:%s error \n", rtmp_info.rtmp_info[0].rtmp_url_live.c_str());
+	    usleep(1000 * 1000);
+	}
+	LOG(0 == ret, function + " librtmp connect to RTMP server");
+    }
+    libRtmp->m_url = rtmp_info.rtmp_info[0].rtmp_url_live;
+    LOG(0 == ret, function + " librtmp connect " + rtmp_info.rtmp_info[0].rtmp_url_live.c_str());
+    if(AUDIO_STATUS){
+	//send aac header
+	unsigned char*  spec_buff = NULL;
+	unsigned long len  = 0;
+	aac_obj.GetFaacEncDecoderSpecificInfo(&spec_buff,&len);
+	libRtmp->SendAACHeader(spec_buff, len);
+    }
+ 
 #if VIDEO_STATUS
     pthread_t thread_push_video;
     ret = pthread_create(&thread_push_video, NULL, LibRtmpPushVideoFun, NULL);
@@ -99,6 +177,66 @@ int main(int argc, char *argv[])
 
     return EXIT_SUCCESS;
 }
+
+extern std::queue <PCMDataStruct> *pcm_cache_queue;
+extern pthread_mutex_t pcm_cache_lock;
+
+void *FAACAudioEncFun(void *ptr){
+    std::string function = __FUNCTION__;
+    int duration = 1000 * 1024 / AUDIO_RATE;
+    struct timeval enc_tv1 = {0, 0};
+    struct timeval enc_tv2 = {0, 0};
+    int ret = -1;
+    LOG(true, "In " + function);
+    while(1){
+        if(!push_flag){
+            usleep(1000 * 100);
+            continue;
+        }
+        if(pcm_cache_queue->size() <= 0){
+            usleep(1000);
+            continue;
+        }
+        pthread_mutex_lock(&pcm_cache_lock);
+        PCMDataStruct pcm_data = pcm_cache_queue->front();
+        /*
+         *         printf("audio_data len is %d \n", audio_data.len);
+         *                 for(int i = 0; i < 2048; i++){
+         *                             printf("%2X ", audio_data.data[i]);
+         *                                     }
+         *                                             printf("\n");*/
+        pcm_cache_queue->pop();
+        pthread_mutex_unlock(&pcm_cache_lock);
+        ret = aac_obj.Process(pcm_data.data, pcm_data.len);
+        if(ret < 0){
+            LOG(false, function + " encode aac data failed");
+            continue;
+        }
+        gettimeofday(&enc_tv2, NULL);
+        long t = (enc_tv2.tv_sec * 1000 * 1000 + enc_tv2.tv_usec) - (enc_tv1.tv_sec * 1000 * 1000 + enc_tv1.tv_usec);
+        if(t + 1000 < duration * 1000){
+            usleep(duration * 1000 - t - 1000);
+            //printf("In %s sleep %ld us \n", __FUNCTION__, duration * 1000 - t);
+        }
+        gettimeofday(&enc_tv1, NULL);
+    }
+}
+int PCM2AACCallback(unsigned char*buff,unsigned long len, void* args)
+{
+    //p_obj->aliyunRTMP->RTMPAudioSend(buff,len);
+  //  aac_file->write((char*)buff, len);
+    MediaDataStruct media_data;
+    media_data.len = len;
+    media_data.index = AUDIOINDEX;
+    media_data.buff = (unsigned char*)malloc(len);
+    memset(media_data.buff, 0, len);
+    memcpy(media_data.buff, buff, len);
+    gettimeofday(&media_data.tv, NULL);
+    pthread_mutex_lock(&audio_buf_queue_lock_faac);
+    audio_buf_queue_faac->push(media_data);
+    pthread_mutex_unlock(&audio_buf_queue_lock_faac);
+}
+
 
 extern int fps;
 extern int capture_count;

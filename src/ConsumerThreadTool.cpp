@@ -281,7 +281,26 @@ bool ConsumerThread::createVideoEncoder()
     }else{
         LOG(true, function + " set output plane format success");
     }
-    ret = m_VideoEncoder->setBitrate(4 * 1024 * 1024);
+    
+    m_VideoEncoder->setInsertVuiEnabled(true);
+    ret = m_VideoEncoder->setFrameRate(DEFAULT_FPS, 1);
+    if (ret < 0){
+        LOG(false, function + " Could not set m_VideoEncoderoder framerate");
+        return false;
+    }else{
+        LOG(true, function + " set m_VideoEncoder framerate success");
+    }
+    ret = m_VideoEncoder->setIFrameInterval(DEFAULT_FPS);
+    if (ret < 0){
+       LOG(false, " Could not set I-frame interval");
+       return false;
+    }else{
+       LOG(true, function + " set I-frame interval success");
+    }
+    m_VideoEncoder->setIDRInterval(DEFAULT_FPS);
+    m_VideoEncoder->setInsertSpsPpsAtIdrEnabled(true);
+ 
+    ret = m_VideoEncoder->setBitrate(2 * 1024 * 1024);
     if (ret < 0){
         LOG(false, function + " could not set bitrate");
         return false;
@@ -321,21 +340,6 @@ bool ConsumerThread::createVideoEncoder()
         return false;
     }else{
         LOG(true, function + " set rate control mode success");
-    }
-    ret = m_VideoEncoder->setInsertVuiEnabled(true);
-    ret = m_VideoEncoder->setIFrameInterval(DEFAULT_FPS);
-    if (ret < 0){
-       LOG(false, " Could not set I-frame interval");
-       return false;
-    }else{
-       LOG(true, function + " set I-frame interval success");
-    }
-    ret = m_VideoEncoder->setFrameRate(DEFAULT_FPS, 1);
-    if (ret < 0){
-        LOG(false, function + " Could not set m_VideoEncoderoder framerate");
-        return false;
-    }else{
-        LOG(true, function + " set m_VideoEncoder framerate success");
     }
     //ret = m_VideoEncoder->setHWPresetType(V4L2_ENC_HW_PRESET_ULTRAFAST);
     //if (ret < 0)
