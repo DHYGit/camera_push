@@ -10,7 +10,7 @@ extern void LOG(bool flag, std::string str);
 static pa_sample_spec sample_spec = {
     .format = PA_SAMPLE_S16LE,
     .rate = 16000,
-    .channels = 1
+    .channels =1
 };
 
 static pa_stream *stream = NULL;
@@ -85,52 +85,52 @@ void stream_state_callback(pa_stream *s, void *userdata)
 std::queue <PCMDataStruct> *pcm_cache_queue;
 pthread_mutex_t pcm_cache_lock;
 
+#define CACHE_LENGTH 20 * 1024
 static struct timeval tv1, tv2;
-unsigned char pcmbuf[40 * 1024];
+unsigned char pcmbuf[CACHE_LENGTH];
 unsigned int pcmoffset = 0;
 unsigned int pcmlength = 0;
 
+#define pac_length 2048
+
 static void stream_read_callback(pa_stream *s, size_t length, void *userdata)
 {
-    std::string function = __FUNCTION__;
-    assert(s);
-    assert(length > 0);
-    gettimeofday(&tv2, NULL);
-    tv1 = tv2;
-    int i = 0;
-    char *ptr = NULL;
-    PCMDataStruct pcm_data;
-    while(pa_stream_readable_size(s) > 0){
-        //printf("pcm date length:%d \n", pa_stream_readable_size(s));
-        if(pa_stream_readable_size(s) > 0)
-        {
-            const void *data;
-            size_t length;
-            if(pa_stream_peek(s, &data, &length) < 0){
-                fprintf(stderr, "Read failed\n");
-                LOG(false, function + " Read failed");
-                return;
-            }
-            
-            if(pcmoffset < 2 * 1024)
-            {
-                memcpy(pcmbuf + pcmoffset, data, length);
-                pcmoffset += length;
-            }else{
-                ptr = (char*)pcmbuf;
-                if(pcmoffset >= 2048){
-                    pthread_mutex_lock(&pcm_cache_lock);
-                    memcpy(pcm_data.data, ptr, 2048);
-                    pcm_data.len = 2048;
-                    pcm_cache_queue->push(pcm_data);
-                    pcmoffset -= 2048;
-                    ptr += 2048;
-                    pthread_mutex_unlock(&pcm_cache_lock);
-                }
-            }
-            pa_stream_drop(s);
-        }
-    }
+	std::string function = __FUNCTION__;
+	assert(s);
+	assert(length > 0);
+	gettimeofday(&tv2, NULL);
+	tv1 = tv2;
+	int i = 0;
+	while(pa_stream_readable_size(s) > 0){
+		//printf("pcm date length:%d \n", pa_stream_readable_size(s));
+		if(pa_stream_readable_size(s) > 0)
+		{
+			const void *data;
+			size_t length;
+			if(pa_stream_peek(s, &data, &length) < 0){
+				fprintf(stderr, "Read failed\n");
+				LOG(false, function + " Read failed");
+				return;
+			}
+
+			memcpy(pcmbuf + pcmoffset, data, length);
+			pcmoffset += length;
+			if(pcmoffset >= pac_length){
+				pthread_mutex_lock(&pcm_cache_lock);
+				PCMDataStruct pcm_data;
+				memcpy(pcm_data.data, pcmbuf, pac_length);
+				pcm_data.len = pac_length;
+				pcm_cache_queue->push(pcm_data);
+				char tmpbuf[CACHE_LENGTH] = {0};
+				memcpy(tmpbuf, pcmbuf + pac_length, pcmoffset - pac_length);
+				memset(pcmbuf, 0, CACHE_LENGTH);
+				memcpy(pcmbuf, tmpbuf, pcmoffset - pac_length);
+				pcmoffset -= pac_length;
+				pthread_mutex_unlock(&pcm_cache_lock);
+			}
+			pa_stream_drop(s);
+		}
+	}
 }
 
 void state_cb(pa_context *c, void *userdata)
@@ -258,7 +258,7 @@ int Alsa2PCM::Init(Stream_Record_Info stream_info)
 
 	    static const pa_sample_spec ss = {
 		    .format = PA_SAMPLE_S16LE,
-		    .rate = 16000,
+		    .rate = stream_info.Rate,
 		    .channels = stream_info.Channel
 	    };
 	    int res = PulseAudioInit(&g_pulse_handle, ss);
@@ -297,19 +297,18 @@ int Alsa2PCM::UnInit(void)
 }
 
 Pcm2AAC::Pcm2AAC()
-    :nSampleRate(16000)
-    ,nChannels(1)
-    ,nBit(16)
-    ,nInputSamples(0)
-    ,nMaxInputBytes(0)
-    ,nMaxOutputBytes(0)
-    ,hEncoder(NULL)
-    ,pConfiguration(NULL)
-    ,pbPCMBuffer(NULL)
-    ,pbAACBuffer(NULL)
-     ,easy_handle(NULL)
 {
-
+	nSampleRate = 32000;
+    	nChannels = 2;
+    	nBit = 16;
+    	nInputSamples = 0;
+    	nMaxInputBytes = 0;
+    	nMaxOutputBytes	= 0;
+    	hEncoder = NULL;
+    	pConfiguration = NULL;
+    	pbPCMBuffer = NULL;
+    	pbAACBuffer = NULL;
+     	easy_handle = NULL;
 }
 
 Pcm2AAC::~Pcm2AAC()

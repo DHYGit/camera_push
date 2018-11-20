@@ -243,58 +243,59 @@ int LibRtmpClass::SendVideoSpsPps(unsigned char *sps,int sps_len,unsigned char *
     return ret;
 }
 int LibRtmpClass::SendH264Packet(NaluUnit *nalu,int bIsKeyFrame,unsigned int nTimeStamp){
-    if(nalu->data == NULL && nalu->size<11){  
-        printf("data error\n",__FILE__,__FUNCTION__,__LINE__);
-        return -1;  
-    }
-    unsigned char *body = (unsigned char*)malloc(nalu->size+9);
-    memset(body,0,nalu->size+9);
-    int i = 0;
-    int ret = 0;
-    if(bIsKeyFrame){
-        body[i++] = 0x17;// 1:Iframe  7:AVC   
-        body[i++] = 0x01;// AVC NALU   
-        body[i++] = 0x00;  
-        body[i++] = 0x00;  
-        body[i++] = 0x00;
-        //NALU size
-        body[i++] = nalu->size>>24 &0xff;  
-        body[i++] = nalu->size>>16 &0xff;  
-        body[i++] = nalu->size>>8 &0xff;  
-        body[i++] = nalu->size&0xff;
-        //NALU data
-        memcpy(&body[i],nalu->data,nalu->size);  
-        ret = SendVideoSpsPps(nalu->spsdata,nalu->spslen,nalu->ppsdata,nalu->ppslen);
-        if(ret == 1){
-            //printf("In %s, send sps and pps success spslen:%d ppslen:%d \n", __FUNCTION__, nalu->spslen, nalu->ppslen);
-            //printf("SPS Data:\n");
-            //for(int index = 0; index < nalu->spslen; index++){
-            //    printf("%02X  ", nalu->spsdata[index]);
-            //}
-            //printf("\n");
-            //printf("PPS Data:\n");
-            //for(int index = 0; index < nalu->ppslen; index++){
-            //    printf("%02X  ", nalu->ppsdata[index]);
-            //}
-            //printf("\n");
-        }
-    }else{
-        body[i++] = 0x27;// 2:Pframe  7:AVC   
-        body[i++] = 0x01;// AVC NALU   
-        body[i++] = 0x00;  
-        body[i++] = 0x00;  
-        body[i++] = 0x00;
-        //NALU size
-        body[i++] = nalu->size>>24 &0xff;  
-        body[i++] = nalu->size>>16 &0xff;  
-        body[i++] = nalu->size>>8 &0xff;  
-        body[i++] = nalu->size&0xff;
-        //NALU data
-        memcpy(&body[i],nalu->data,nalu->size);
-    }
-    ret = SendPacket(RTMP_PACKET_TYPE_VIDEO,body,i + nalu->size,nTimeStamp);  
-    free(body);  
-    return ret; 
+	if(nalu->data == NULL&& nalu->size<11){  
+		printf("%s %s %d data error\n",__FILE__,__FUNCTION__,__LINE__);
+		return -1;  
+	}
+
+	unsigned char *body = (unsigned char*)malloc(nalu->size+9);
+	memset(body,0,nalu->size+9);
+	int i = 0;
+	int ret = 0;
+	if(bIsKeyFrame){
+		body[i++] = 0x17;// 1:Iframe  7:AVC   
+		body[i++] = 0x01;// AVC NALU   
+		body[i++] = 0x00;  
+		body[i++] = 0x00;  
+		body[i++] = 0x00;
+		//NALU size
+		body[i++] = nalu->size>>24 &0xff;  
+		body[i++] = nalu->size>>16 &0xff;  
+		body[i++] = nalu->size>>8 &0xff;  
+		body[i++] = nalu->size&0xff;
+		//NALU data
+		memcpy(&body[i],nalu->data,nalu->size);  
+		ret = SendVideoSpsPps(nalu->spsdata,nalu->spslen,nalu->ppsdata,nalu->ppslen);
+		if(ret == 1){
+			//printf("In %s, send sps and pps success spslen:%d ppslen:%d \n", __FUNCTION__, nalu->spslen, nalu->ppslen);
+			//printf("SPS Data:\n");
+			//for(int index = 0; index < nalu->spslen; index++){
+			//    printf("%02X  ", nalu->spsdata[index]);
+			//}
+			//printf("\n");
+			//printf("PPS Data:\n");
+			//for(int index = 0; index < nalu->ppslen; index++){
+			//    printf("%02X  ", nalu->ppsdata[index]);
+			//}
+			//printf("\n");
+		}
+	}else{
+		body[i++] = 0x27;// 2:Pframe  7:AVC   
+		body[i++] = 0x01;// AVC NALU   
+		body[i++] = 0x00;  
+		body[i++] = 0x00;  
+		body[i++] = 0x00;
+		//NALU size
+		body[i++] = nalu->size>>24 &0xff;  
+		body[i++] = nalu->size>>16 &0xff;  
+		body[i++] = nalu->size>>8 &0xff;  
+		body[i++] = nalu->size&0xff;
+		//NALU data
+		memcpy(&body[i],nalu->data,nalu->size);
+	}
+	ret = SendPacket(RTMP_PACKET_TYPE_VIDEO,body,i + nalu->size,nTimeStamp);  
+	free(body);  
+	return ret; 
 }
 
 int LibRtmpClass::SendPacket(unsigned int nPacketType,unsigned char *data,unsigned int size,unsigned int nTimestamp){

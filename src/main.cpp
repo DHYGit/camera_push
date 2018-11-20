@@ -66,7 +66,8 @@ int main(int argc, char *argv[])
     LOG(true, "Progress start");
 
     memset(&rtmp_info, 0, sizeof(RtmpInfo));
-    rtmp_info.rtmp_info[0].rtmp_url_live = "rtmp://video-center.alivecdn.com/AppName/StreamName?vhost=live.rabbitslive.com";
+    //rtmp_info.rtmp_info[0].rtmp_url_live = "rtmp://video-center.alivecdn.com/AppName/StreamName?vhost=live.rabbitslive.com";
+    rtmp_info.rtmp_info[0].rtmp_url_live = "rtmp://192.168.0.151/live/rabbit";
 
     libRtmp = new LibRtmpClass();
     libRtmp->InitSockets();
@@ -83,7 +84,7 @@ int main(int argc, char *argv[])
     Stream_Record_Info s_info;
     s_info.Channel = 1;
     s_info.Frames = 160;
-    s_info.Rate = 16000;
+    s_info.Rate = AUDIO_RATE;
     s_info.pcm_type=PCM_TYPE_PULSEaUDIO;
     s_info.Format  = SND_PCM_FORMAT_S16_LE;
     
@@ -97,7 +98,7 @@ int main(int argc, char *argv[])
         return ret;
     } 
     
-    aac_obj.nSampleRate = s_info.Rate;
+    aac_obj.nSampleRate = AUDIO_RATE;
     aac_obj.nChannels = 1;
     aac_obj.nBit = 16;
     aac_obj.nInputSamples = 0;
@@ -147,6 +148,11 @@ int main(int argc, char *argv[])
 	unsigned char*  spec_buff = NULL;
 	unsigned long len  = 0;
 	aac_obj.GetFaacEncDecoderSpecificInfo(&spec_buff,&len);
+	printf("aac header:");
+        for(int i = 0; i < len; i++){
+                printf("0x%02X\t", spec_buff[i]);
+        }
+        printf("\n");	
 	libRtmp->SendAACHeader(spec_buff, len);
     }
  
@@ -164,16 +170,20 @@ int main(int argc, char *argv[])
     pthread_t thread_video_fps;
     ret = pthread_create(&thread_video_fps, NULL, LibRtmpVideoFpsFun, NULL);
     LOG(0 == ret, function + " create video fps thread");
-    
+
+#if VIDEO_STATUS
     int num = atoi(argv[1]);
     NvApplicationProfiler &profiler = NvApplicationProfiler::getProfilerInstance();
     pthread_t fps_thread;
     pthread_create(&fps_thread, NULL, fps_function, NULL);
     if (!execute(num))
         return EXIT_FAILURE;
-
     profiler.stop();
     profiler.printProfilerData(std::cout);
+#endif
+    while(1){
+	sleep(1);
+    }
 
     return EXIT_SUCCESS;
 }

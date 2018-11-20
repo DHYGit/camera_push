@@ -266,7 +266,7 @@ bool ConsumerThread::createVideoEncoder()
         m_VideoEncoder->enableProfiling();
 
     ret = m_VideoEncoder->setCapturePlaneFormat(ENCODER_PIXFMT, DST_WIDTH,
-                                    DST_HEIGHT, 2 * 1024 * 1024);
+                                    DST_HEIGHT, 1 * 1024 * 1024);
     if (ret < 0){
         LOG(false, function + " could not set capture plane format");
         return false;
@@ -300,7 +300,7 @@ bool ConsumerThread::createVideoEncoder()
     m_VideoEncoder->setIDRInterval(DEFAULT_FPS);
     m_VideoEncoder->setInsertSpsPpsAtIdrEnabled(true);
  
-    ret = m_VideoEncoder->setBitrate(2 * 1024 * 1024);
+    ret = m_VideoEncoder->setBitrate(1 * 1024 * 1024);
     if (ret < 0){
         LOG(false, function + " could not set bitrate");
         return false;

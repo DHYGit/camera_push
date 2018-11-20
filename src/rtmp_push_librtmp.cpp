@@ -73,22 +73,24 @@ void *LibRtmpPushVideoFun(void *ptr){
         naluUnitData.data = NULL;
         ret = libRtmp->ReadOneNaluFromBuf(&naluUnitData, media_data.buff, media_data.len);
         if(ret < 0){
-            LOG(false, function + " ReadFirstNaluFromBuf failed");
+		char ret_c[10];
+		sprintf(ret_c, "%d", ret);
+            LOG(false, function + " ReadFirstNaluFromBuf failed " + ret_c);
             continue;
         }
         int bKeyframe  = (naluUnitData.type == 0x05) ? true : false;
-        if(start_tv.tv_sec == 0){
-            vid_pts += 1000 / DEFAULT_FPS;
-            start_tv = media_data.tv;
+        //if(start_tv.tv_sec == 0){
+        //    vid_pts += 1000 / DEFAULT_FPS;
+        //    start_tv = media_data.tv;
             //gettimeofday(&start_tv, NULL);
-        }else{
+        //}else{
             //gettimeofday(&current_tv, NULL);
-            long t1 = media_data.tv.tv_sec * 1000 * 1000 + media_data.tv.tv_usec;
+        //    long t1 = media_data.tv.tv_sec * 1000 * 1000 + media_data.tv.tv_usec;
             //long t1 = current_tv.tv_sec * 1000 * 1000 + current_tv.tv_usec;
-            long t2 = start_tv.tv_sec * 1000 * 1000 + start_tv.tv_usec;
-            vid_pts = (t1 - t2) / 1000;
-        }
-        //vid_pts += vid_duration;
+        //    long t2 = start_tv.tv_sec * 1000 * 1000 + start_tv.tv_usec;
+        //    vid_pts = (t1 - t2) / 1000;
+        //}
+        vid_pts += vid_duration*2;
         while(pushing_aud){
             usleep(100);
         }
@@ -97,7 +99,7 @@ void *LibRtmpPushVideoFun(void *ptr){
         if(ret == 1){
             //printf("In %s send video data success pts %ld len %d\n", __FUNCTION__, vid_pts, media_data.len);
         }else{
-            printf("In %s send video data failed pts %ld\n", __FUNCTION__, vid_pts);
+            printf("In %s send video data failed pts %ld error num %d\n", __FUNCTION__, vid_pts, ret);
             LOG(false, function + " send video data failed");
         }
         pushing_vid = false;
@@ -118,7 +120,7 @@ void *LibRtmpPushAudioFun(void *ptr){
     int wait_num = 0;
     int ret = -1;
     struct timeval start_tv = {0, 0};
-    int audio_duration = 1000 * 1024 / AUDIO_RATE;
+    int audio_duration = 1000 * 1024 / AUDIO_RATE / 4 * 3;
     LOG(true, "In " + function);
     while(1){
         if(!push_flag){
@@ -149,9 +151,8 @@ void *LibRtmpPushAudioFun(void *ptr){
             }
             wait_num++;
             continue;
-        }else if(video_buf_queue->size() > 0 && wait_num != 0){
-            wait_num = 0;
         }
+	wait_num = 0;
         pthread_mutex_lock(&audio_buf_queue_lock_faac);
         MediaDataStruct media_data = audio_buf_queue_faac->front();
         audio_buf_queue_faac->pop();
@@ -171,7 +172,7 @@ void *LibRtmpPushAudioFun(void *ptr){
         pushing_aud = true;
         ret = libRtmp->SendAACData(media_data.buff, media_data.len, aud_pts);
         if(ret == 1){
-            //printf("In %s send audio data success pts %ld len %d\n", __FUNCTION__, aud_pts, media_data.len);
+            printf("In %s send audio data success pts %ld len %d\n", __FUNCTION__, aud_pts, media_data.len);
         }else{
             LOG(false, function + " send audio data failed");
             printf("In %s send audio data failed pts %ld\n", __FUNCTION__, aud_pts);
